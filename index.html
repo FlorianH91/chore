@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio Chorégraphique EPS - V20</title>
+    <style>
+        :root {
+            --primary: #6366f1; --bg: #0f172a; --card-bg: #1e293b; --text: #f8fafc;
+            --cat-jambes: #f87171; --cat-bras: #fbbf24; --cat-tours: #34d399;
+            --cat-sauts: #60a5fa; --cat-mixtes: #a78bfa; --cat-passage-au-sol: #f472b6;
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        header { text-align: center; margin-bottom: 20px; width: 100%; }
+        
+        .mode-selector { display: flex; gap: 10px; margin-bottom: 30px; background: #1e293b; padding: 5px; border-radius: 12px; justify-content: center; }
+        .tab-btn { padding: 10px 25px; border-radius: 8px; border: none; cursor: pointer; background: transparent; color: #94a3b8; font-weight: bold; }
+        .tab-btn.active { background: var(--primary); color: white; }
+
+        .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+        button { border: none; padding: 10px 18px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .btn-main { background: var(--primary); color: white; }
+        .btn-train { background: #f59e0b; color: white; }
+        .btn-pdf { background: #059669; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+
+        #choreography-grid, #library-grid { 
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 250px)); 
+            gap: 20px; width: 100%; max-width: 1200px; justify-content: center;
+        }
+
+        .move-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; position: relative; display: flex; flex-direction: column; border-top: 6px solid var(--primary); }
+        .cat-jambes { border-top-color: var(--cat-jambes) !important; }
+        .cat-bras { border-top-color: var(--cat-bras) !important; }
+        .cat-tours { border-top-color: var(--cat-tours) !important; }
+        .cat-sauts { border-top-color: var(--cat-sauts) !important; }
+        .cat-mixtes { border-top-color: var(--cat-mixtes) !important; }
+        .cat-passage-au-sol { border-top-color: var(--cat-passage-au-sol) !important; }
+
+        .move-card video { width: 100%; aspect-ratio: 16/9; object-fit: cover; cursor: zoom-in; background: #000; }
+        .move-info { padding: 12px; flex-grow: 1; }
+        .cat-tag { font-size: 0.65rem; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.4); font-weight: bold; }
+        .btn-nav-box { display: flex; gap: 5px; margin-top: 10px; }
+        .btn-nav { background: #334155; color: white; flex: 1; padding: 6px; border-radius: 4px; border: none; cursor: pointer; }
+
+        #training-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 5000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        #training-video { width: 85%; max-width: 800px; border-radius: 15px; border: 8px solid var(--primary); margin: 20px 0; }
+        .train-controls { display: flex; gap: 20px; width: 85%; max-width: 800px; }
+        .btn-step { flex: 1; padding: 20px; font-size: 1.2rem; background: var(--primary); color: white; border-radius: 12px; }
+
+        #zoom-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 3000; }
+        #zoom-modal video { width: 90%; max-width: 900px; border-radius: 10px; }
+
+        @media print {
+            header, .mode-selector, .controls, #filterBar, #library-grid, h2:last-of-type, .btn-nav-box, button { display: none !important; }
+            body { background: white !important; }
+            #choreography-grid { display: block !important; width: 100%; }
+            .move-card { display: flex !important; flex-direction: row !important; border: 1px solid #000 !important; margin-bottom: 10px !important; page-break-inside: avoid !important; border-top: none !important; border-left: 15px solid #333 !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Studio Chorégraphique</h1>
+        <div class="mode-selector">
+            <button class="tab-btn active" id="tab-random" onclick="switchMode('random')">🎲 Aléatoire</button>
+            <button class="tab-btn" id="tab-design" onclick="switchMode('design')">✍️ Conception</button>
+        </div>
+        <div class="controls">
+            <button id="btn-gen" class="btn-main" onclick="confirmGenerate()">Générer 6 mouvements</button>
+            <button class="btn-train" onclick="startTraining()">🏃 S'entraîner (Manuel)</button>
+            <button class="btn-pdf" onclick="window.print()">🖨️ PDF</button>
+            <button class="btn-danger" onclick="confirmClear()">🗑️ Vider</button>
+        </div>
+    </header>
+
+    <h2 style="width:100%; max-width:1200px;">Ma Séquence (<span id="count">0</span>)</h2>
+    <div id="choreography-grid"></div>
+
+    <h2 style="width:100%; max-width:1200px; margin-top:40px;">Banque de mouvements</h2>
+    <div id="filterBar" style="margin-bottom:20px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;"></div>
+    <div id="library-grid"></div>
+
+    <div id="training-overlay">
+        <button class="btn-danger" style="position:absolute; top:20px; right:20px;" onclick="stopTraining()">QUITTER ✕</button>
+        <div style="text-align:center;">
+            <h2 id="train-move-name" style="font-size: 2.5rem; margin-bottom:5px;">Nom</h2>
+            <span id="train-move-cat-tag" class="cat-tag" style="font-size:1rem; padding:5px 15px;">Catégorie</span>
+        </div>
+        <video id="training-video" src="" muted loop autoplay></video>
+        <div class="train-controls">
+            <button class="btn-step" style="background:#475569;" onclick="changeMove(-1)">⬅ Précédent</button>
+            <button id="btn-next" class="btn-step" onclick="changeMove(1)">Suivant ➡</button>
+        </div>
+        <p id="train-step" style="margin-top:20px; font-weight:bold;">Mouvement 1 / 6</p>
+    </div>
+
+    <div id="zoom-modal" onclick="closeZoom()">
+        <video id="zoom-video" controls loop autoplay onclick="event.stopPropagation()"></video>
+    </div>
+
+    <script>
+        const database = [
+    // BRAS
+    { c: "Bras", n: "Arm varia 1", p: "100 mouv/Bras/69_Arm varia 1.mp4" },
+    { c: "Bras", n: "Arm varia 2", p: "100 mouv/Bras/70_Arm varia 2.mp4" },
+    { c: "Bras", n: "Arm varia 3", p: "100 mouv/Bras/71_Arm varia 3.mp4" },
+    { c: "Bras", n: "Arm varia 4", p: "100 mouv/Bras/72_Arm varia 4.mp4" },
+    { c: "Bras", n: "Arm varia 5", p: "100 mouv/Bras/73_Arm varia 5.mp4" },
+    { c: "Bras", n: "Arm varia 6", p: "100 mouv/Bras/74_Arm varia 6.mp4" },
+    { c: "Bras", n: "Arched back shoulder grab", p: "100 mouv/Bras/75_Arched back shoulder grab.mp4" },
+    { c: "Bras", n: "Arm circle", p: "100 mouv/Bras/83_Arm circle.mp4" },
+
+    // JAMBES
+    { c: "Jambes", n: "Plies", p: "100 mouv/Jambes/18_Plies.mp4" },
+    { c: "Jambes", n: "Battements", p: "100 mouv/Jambes/19_Battements.mp4" },
+    { c: "Jambes", n: "Rond de jambe", p: "100 mouv/Jambes/20_Rond de jambe.mp4" },
+    { c: "Jambes", n: "Penche", p: "100 mouv/Jambes/21_Penche.mp4" },
+    { c: "Jambes", n: "Penche fan", p: "100 mouv/Jambes/22_Penche fan.mp4" },
+    { c: "Jambes", n: "Double stag battement", p: "100 mouv/Jambes/23_Double stag battement.mp4" },
+    { c: "Jambes", n: "Arabesque battement", p: "100 mouv/Jambes/24_Arabesque battement.mp4" },
+    { c: "Jambes", n: "Fan kick", p: "100 mouv/Jambes/25_Fan kick.mp4" },
+    { c: "Jambes", n: "Inverted fan kick", p: "100 mouv/Jambes/26_Inverted fan kick.mp4" },
+    { c: "Jambes", n: "Fondu", p: "100 mouv/Jambes/27_Fondu.mp4" },
+    { c: "Jambes", n: "Swivle battement", p: "100 mouv/Jambes/28_Swivle battement.mp4" },
+    { c: "Jambes", n: "Attitude swings", p: "100 mouv/Jambes/29_Attitude swings.mp4" },
+    { c: "Jambes", n: "Leg swings", p: "100 mouv/Jambes/30_Leg swings.mp4" },
+    { c: "Jambes", n: "Step through", p: "100 mouv/Jambes/80_Step through.mp4" },
+    { c: "Jambes", n: "Step back", p: "100 mouv/Jambes/81_Step back.mp4" },
+    { c: "Jambes", n: "Sweep kick", p: "100 mouv/Jambes/82_Sweep kick.mp4" },
+    { c: "Jambes", n: "Pas de bourree", p: "100 mouv/Jambes/88_Pas de bourree.mp4" },
+    { c: "Jambes", n: "Flick kick", p: "100 mouv/Jambes/89_Flick kick.mp4" },
+    { c: "Jambes", n: "Chug", p: "100 mouv/Jambes/91_Chug.mp4" },
+    { c: "Jambes", n: "Walks", p: "100 mouv/Jambes/92_Walks.mp4" },
+    { c: "Jambes", n: "Runs", p: "100 mouv/Jambes/96_Runs.mp4" },
+
+    // MIXTES
+    { c: "Mixtes", n: "Impro", p: "100 mouv/Mixtes/100_Impro.mp4" },
+    { c: "Mixtes", n: "Chopper", p: "100 mouv/Mixtes/61_Chopper.mp4" },
+    { c: "Mixtes", n: "Double chopper", p: "100 mouv/Mixtes/62_Double chopper.mp4" },
+    { c: "Mixtes", n: "Contraction", p: "100 mouv/Mixtes/63_Contraction.mp4" },
+    { c: "Mixtes", n: "Contraction varia 1", p: "100 mouv/Mixtes/64_Contraction varia 1.mp4" },
+    { c: "Mixtes", n: "Contraction varia 2", p: "100 mouv/Mixtes/65_Contraction varia 2.mp4" },
+    { c: "Mixtes", n: "Head grab", p: "100 mouv/Mixtes/66_Head grab.mp4" },
+    { c: "Mixtes", n: "Flat back swim through", p: "100 mouv/Mixtes/67_Flat back swim through.mp4" },
+    { c: "Mixtes", n: "Passe contraction", p: "100 mouv/Mixtes/67_Passe contraction.mp4" },
+    { c: "Mixtes", n: "Sway back and forth", p: "100 mouv/Mixtes/68_Sway back and forth.mp4" },
+    { c: "Mixtes", n: "Body roll", p: "100 mouv/Mixtes/76_Body roll.mp4" },
+    { c: "Mixtes", n: "Body roll varia", p: "100 mouv/Mixtes/77_Body roll varia.mp4" },
+    { c: "Mixtes", n: "Flat back head roll", p: "100 mouv/Mixtes/78_Flat back head roll.mp4" },
+    { c: "Mixtes", n: "Snake through", p: "100 mouv/Mixtes/79_Snake through.mp4" },
+    { c: "Mixtes", n: "Slide", p: "100 mouv/Mixtes/84_Slide.mp4" },
+    { c: "Mixtes", n: "Heel toe", p: "100 mouv/Mixtes/85_Heel toe.mp4" },
+    { c: "Mixtes", n: "Passe port de bra", p: "100 mouv/Mixtes/86_Passe port de bra.mp4" },
+    { c: "Mixtes", n: "Step passe step attitude contraction", p: "100 mouv/Mixtes/90_Step passe step attitude contraction.mp4" },
+    { c: "Mixtes", n: "Heel drag release", p: "100 mouv/Mixtes/93_Heel drag release.mp4" },
+    { c: "Mixtes", n: "Pull back varia 1", p: "100 mouv/Mixtes/94_Pull back varia 1.mp4" },
+    { c: "Mixtes", n: "Pull back varia 2", p: "100 mouv/Mixtes/95_Pull back varia 2.mp4" },
+    { c: "Mixtes", n: "Pulls accross", p: "100 mouv/Mixtes/97_Pulls accross.mp4" },
+    { c: "Mixtes", n: "Step ball change varia", p: "100 mouv/Mixtes/98_Step ball change varia.mp4" },
+
+    // PASSAGE AU SOL
+    { c: "Passage au sol", n: "Tumble", p: "100 mouv/Passage au sol/43_Tumble.mp4" },
+    { c: "Passage au sol", n: "Knee drop", p: "100 mouv/Passage au sol/44_knee drop.mp4" },
+    { c: "Passage au sol", n: "Knee drop jump", p: "100 mouv/Passage au sol/45_knee drop jump.mp4" },
+    { c: "Passage au sol", n: "Plank drop", p: "100 mouv/Passage au sol/46_Plank drop.mp4" },
+    { c: "Passage au sol", n: "Floor rond de jambe", p: "100 mouv/Passage au sol/47_Floor rond de jambe.mp4" },
+    { c: "Passage au sol", n: "Floor developpe", p: "100 mouv/Passage au sol/48_Floor developpe.mp4" },
+    { c: "Passage au sol", n: "Sweep to floor", p: "100 mouv/Passage au sol/49_Sweep to floor.mp4" },
+    { c: "Passage au sol", n: "Roll down", p: "100 mouv/Passage au sol/50_Roll down.mp4" },
+    { c: "Passage au sol", n: "Roll up", p: "100 mouv/Passage au sol/51_Roll up.mp4" },
+    { c: "Passage au sol", n: "Arch up", p: "100 mouv/Passage au sol/52_Arch up.mp4" },
+    { c: "Passage au sol", n: "Needle", p: "100 mouv/Passage au sol/53_Needle.mp4" },
+    { c: "Passage au sol", n: "Tumble variation", p: "100 mouv/Passage au sol/54_Tumble.mp4" },
+    { c: "Passage au sol", n: "Fan tumble", p: "100 mouv/Passage au sol/55_Fan tumble.mp4" },
+    { c: "Passage au sol", n: "Fish flop", p: "100 mouv/Passage au sol/56_Fish flop.mp4" },
+    { c: "Passage au sol", n: "Port de bra", p: "100 mouv/Passage au sol/57_Port de bra.mp4" },
+    { c: "Passage au sol", n: "Squat to middle split", p: "100 mouv/Passage au sol/58_Squat to middle split.mp4" },
+    { c: "Passage au sol", n: "Arched back twist", p: "100 mouv/Passage au sol/59_Arched back twist.mp4" },
+    { c: "Passage au sol", n: "Arched back flicks", p: "100 mouv/Passage au sol/60_Arched back flicks.mp4" },
+    { c: "Passage au sol", n: "Slide to floor", p: "100 mouv/Passage au sol/87_Slide to floor.mp4" },
+
+    // SAUTS
+    { c: "Sauts", n: "Extended C jump", p: "100 mouv/Sauts/01_Extended C jump.mp4" },
+    { c: "Sauts", n: "Calypso", p: "100 mouv/Sauts/02_Calypso.mp4" },
+    { c: "Sauts", n: "Arm circle jump", p: "100 mouv/Sauts/03_Arm circle jump.mp4" },
+    { c: "Sauts", n: "Twist jump", p: "100 mouv/Sauts/04_Twist jump.mp4" },
+    { c: "Sauts", n: "Passe jump", p: "100 mouv/Sauts/05_Passe jump.mp4" },
+    { c: "Sauts", n: "Sweep jump", p: "100 mouv/Sauts/06_Sweep jump.mp4" },
+    { c: "Sauts", n: "Tilt jump", p: "100 mouv/Sauts/07_Tilt jump.mp4" },
+    { c: "Sauts", n: "Side attitude jump", p: "100 mouv/Sauts/08_Side attitude jump.mp4" },
+    { c: "Sauts", n: "Sway jump", p: "100 mouv/Sauts/09_Sway jump.mp4" },
+    { c: "Sauts", n: "Stag jump", p: "100 mouv/Sauts/10_Stag jump.mp4" },
+    { c: "Sauts", n: "Axel jump", p: "100 mouv/Sauts/11_Axel jump.mp4" },
+    { c: "Sauts", n: "Arabesque rond de jambe", p: "100 mouv/Sauts/12_Arabesque rond de jambe.mp4" },
+    { c: "Sauts", n: "Saute", p: "100 mouv/Sauts/13_Saute.mp4" },
+    { c: "Sauts", n: "Swim through jump", p: "100 mouv/Sauts/14_Swim through jump.mp4" },
+    { c: "Sauts", n: "Prances", p: "100 mouv/Sauts/15_Prances.mp4" },
+    { c: "Sauts", n: "Weight transfer jump", p: "100 mouv/Sauts/16_Weight transfer jump.mp4" },
+    { c: "Sauts", n: "Sweep to floor jump", p: "100 mouv/Sauts/17_Sweep to floor jump.mp4" },
+
+    // TOURS
+    { c: "Tours", n: "A la seconde turns", p: "100 mouv/Tours/31_A la seconde turns.mp4" },
+    { c: "Tours", n: "Pencil turn", p: "100 mouv/Tours/32_Pencil turn.mp4" },
+    { c: "Tours", n: "Chaine turns", p: "100 mouv/Tours/33_Chaine turns.mp4" },
+    { c: "Tours", n: "Pirouette", p: "100 mouv/Tours/34_Pirouette.mp4" },
+    { c: "Tours", n: "Waltz", p: "100 mouv/Tours/35_Waltz.mp4" },
+    { c: "Tours", n: "Front attitude turn", p: "100 mouv/Tours/36_Front attitude turn.mp4" },
+    { c: "Tours", n: "Back attitude turn", p: "100 mouv/Tours/37_Back attitude turn.mp4" },
+    { c: "Tours", n: "Illusion", p: "100 mouv/Tours/38_Illusion.mp4" },
+    { c: "Tours", n: "Pivot turn", p: "100 mouv/Tours/39_Pivot turn.mp4" },
+    { c: "Tours", n: "Twist turn", p: "100 mouv/Tours/40_Twist turn.mp4" },
+    { c: "Tours", n: "Releve twist", p: "100 mouv/Tours/41_Releve twist.mp4" },
+    { c: "Tours", n: "Knee turn", p: "100 mouv/Tours/42_knee turn.mp4" },
+    { c: "Tours", n: "Tour final", p: "100 mouv/Tours/99_Tour.mp4" }
+];
+
+
+        let myChore = [];
+        let currentMode = 'random';
+        let trainIdx = 0;
+        let lastFilter = 'Tous';
+
+        window.onload = () => { 
+            initFilters(); 
+            // RESTAURATION : On récupère ce qui était là avant
+            const saved = localStorage.getItem('choreography_save');
+            if (saved) {
+                myChore = JSON.parse(saved);
+            }
+            updateUI(); 
+            renderLibrary(database);
+        };
+
+        function getCatClass(cat) { return 'cat-' + cat.toLowerCase().replace(/ /g, '-'); }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + mode).classList.add('active');
+            document.getElementById('btn-gen').style.display = (mode === 'random' ? 'inline-block' : 'none');
+            // Note: On ne vide plus la choré ici pour permettre de basculer de mode sans perdre son travail
+            updateUI();
+        }
+
+        function initFilters() {
+            const cats = ["Tous", "Jambes", "Bras", "Tours", "Sauts", "Mixtes", "Passage au sol"];
+            document.getElementById('filterBar').innerHTML = cats.map(c => 
+                `<button style="padding:8px 15px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer;" onclick="filterLib('${c}')">${c === 'Passage au sol' ? 'Sol' : c}</button>`).join('');
+        }
+
+        function filterLib(cat) {
+            lastFilter = cat;
+            renderLibrary(cat === 'Tous' ? database : database.filter(m => m.c === cat));
+        }
+
+        function renderLibrary(data) {
+            document.getElementById('library-grid').innerHTML = data.map(m => `
+                <div class="move-card ${getCatClass(m.c)}">
+                    <video src="${m.p}#t=0.1" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
+                    <div class="move-info">
+                        <span class="cat-tag">${m.c}</span>
+                        <div style="font-weight:bold; margin-top:8px;">${m.n}</div>
+                        ${currentMode === 'design' ? `<button style="width:100%; margin-top:10px; background:#10b981; color:white; border:none; padding:8px; border-radius:5px; cursor:pointer;" onclick="addToChore('${m.p}')">➕ Ajouter</button>` : ''}
+                    </div>
+                </div>`).join('');
+        }
+
+        function confirmGenerate() {
+            if(myChore.length > 0) {
+                if(!confirm("Cela va remplacer ta chorégraphie actuelle. Continuer ?")) return;
+            }
+            generateRandom();
+        }
+
+        function generateRandom() {
+            myChore = [];
+            ["Jambes", "Bras", "Tours", "Sauts", "Mixtes", "Passage au sol"].forEach(c => {
+                const opt = database.filter(m => m.c === c);
+                if(opt.length) myChore.push({...opt[Math.floor(Math.random()*opt.length)]});
+            });
+            updateUI();
+        }
+
+        function addToChore(path) {
+            myChore.push({...database.find(m => m.p === path)});
+            updateUI();
+        }
+
+        function updateUI() {
+            // SAUVEGARDE SYSTÉMATIQUE
+            localStorage.setItem('choreography_save', JSON.stringify(myChore));
+
+            document.getElementById('count').innerText = myChore.length;
+            document.getElementById('choreography-grid').innerHTML = myChore.map((m, i) => `
+                <div class="move-card ${getCatClass(m.c)}">
+                    <video src="${m.p}#t=0.1" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
+                    <div class="move-info">
+                        <strong>#${i+1}</strong> <span class="cat-tag">${m.c}</span>
+                        <div style="font-weight:bold; margin-top:8px;">${m.n}</div>
+                        ${currentMode === 'design' ? `
+                            <div class="btn-nav-box">
+                                <button class="btn-nav" onclick="moveMove(${i}, -1)">←</button>
+                                <button class="btn-nav" onclick="moveMove(${i}, 1)">→</button>
+                                <button class="btn-nav" style="background:#ef4444" onclick="removeMove(${i})">🗑️</button>
+                            </div>` : ''}
+                    </div>
+                </div>`).join('');
+            renderLibrary(lastFilter === 'Tous' ? database : database.filter(m => m.c === lastFilter));
+        }
+
+        function confirmClear() {
+            if(confirm("Voulez-vous vraiment tout effacer ?")) {
+                myChore = [];
+                updateUI();
+            }
+        }
+
+        // --- ENTRAINEMENT ---
+        function startTraining() {
+            if (myChore.length === 0) return alert("Séquence vide !");
+            trainIdx = 0;
+            document.getElementById('training-overlay').style.display = 'flex';
+            showMove();
+        }
+
+        function showMove() {
+            const move = myChore[trainIdx];
+            const tv = document.getElementById('training-video');
+            const color = getComputedStyle(document.documentElement).getPropertyValue('--cat-' + move.c.toLowerCase().replace(/ /g, '-')).trim();
+            tv.src = move.p;
+            tv.style.borderColor = color;
+            document.getElementById('train-move-name').innerText = move.n;
+            document.getElementById('train-move-name').style.color = color;
+            document.getElementById('train-move-cat-tag').innerText = move.c;
+            document.getElementById('train-step').innerText = `Mouvement ${trainIdx + 1} / ${myChore.length}`;
+            document.getElementById('btn-next').innerText = (trainIdx === myChore.length - 1) ? "Terminer ✓" : "Suivant ➡";
+        }
+
+        function changeMove(dir) {
+            trainIdx += dir;
+            if (trainIdx < 0) trainIdx = 0;
+            if (trainIdx >= myChore.length) { stopTraining(); return; }
+            showMove();
+        }
+
+        function stopTraining() {
+            const tv = document.getElementById('training-video');
+            tv.pause(); tv.src = "";
+            document.getElementById('training-overlay').style.display = 'none';
+        }
+
+        function openZoom(p) {
+            const zv = document.getElementById('zoom-video');
+            zv.src = p;
+            document.getElementById('zoom-modal').style.display='flex';
+            zv.play();
+        }
+
+        function closeZoom() {
+            const zv = document.getElementById('zoom-video');
+            zv.pause(); zv.src = "";
+            document.getElementById('zoom-modal').style.display='none';
+        }
+
+        function moveMove(i, d) { 
+            const ni = i+d; 
+            if(ni>=0 && ni<myChore.length) { 
+                [myChore[i], myChore[ni]] = [myChore[ni], myChore[i]]; 
+                updateUI(); 
+            } 
+        }
+
+        function removeMove(i) { 
+            myChore.splice(i, 1); 
+            updateUI(); 
+        }
+    </script>
+</body>
+</html>
