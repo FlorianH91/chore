@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio Chorégraphique EPS - V20</title>
+    <title>Studio Chorégraphique EPS - V23 (Vignettes Fluides)</title>
     <style>
         :root {
             --primary: #6366f1; --bg: #0f172a; --card-bg: #1e293b; --text: #f8fafc;
@@ -30,7 +30,9 @@
             gap: 20px; width: 100%; max-width: 1200px; justify-content: center;
         }
 
-        .move-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; position: relative; display: flex; flex-direction: column; border-top: 6px solid var(--primary); }
+        .move-card { background: var(--card-bg); border-radius: 12px; overflow: hidden; position: relative; display: flex; flex-direction: column; border-top: 6px solid var(--primary); transition: transform 0.2s; }
+        .move-card:hover { transform: translateY(-5px); }
+        
         .cat-jambes { border-top-color: var(--cat-jambes) !important; }
         .cat-bras { border-top-color: var(--cat-bras) !important; }
         .cat-tours { border-top-color: var(--cat-tours) !important; }
@@ -41,8 +43,13 @@
         .move-card video { width: 100%; aspect-ratio: 16/9; object-fit: cover; cursor: zoom-in; background: #000; }
         .move-info { padding: 12px; flex-grow: 1; }
         .cat-tag { font-size: 0.65rem; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.4); font-weight: bold; }
-        .btn-nav-box { display: flex; gap: 5px; margin-top: 10px; }
-        .btn-nav { background: #334155; color: white; flex: 1; padding: 6px; border-radius: 4px; border: none; cursor: pointer; }
+        
+        .search-bar { width: 90%; max-width: 400px; padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 15px; }
+        
+        .pagination { display: flex; gap: 15px; margin: 30px 0; justify-content: center; align-items: center; }
+        .btn-page { background: #334155; color: white; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-page:disabled { opacity: 0.2; cursor: not-allowed; }
+        .page-info { font-weight: bold; color: var(--primary); font-size: 1.1rem; min-width: 80px; text-align: center; }
 
         #training-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 5000; display: none; flex-direction: column; align-items: center; justify-content: center; }
         #training-video { width: 85%; max-width: 800px; border-radius: 15px; border: 8px solid var(--primary); margin: 20px 0; }
@@ -51,13 +58,6 @@
 
         #zoom-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; justify-content: center; align-items: center; z-index: 3000; }
         #zoom-modal video { width: 90%; max-width: 900px; border-radius: 10px; }
-
-        @media print {
-            header, .mode-selector, .controls, #filterBar, #library-grid, h2:last-of-type, .btn-nav-box, button { display: none !important; }
-            body { background: white !important; }
-            #choreography-grid { display: block !important; width: 100%; }
-            .move-card { display: flex !important; flex-direction: row !important; border: 1px solid #000 !important; margin-bottom: 10px !important; page-break-inside: avoid !important; border-top: none !important; border-left: 15px solid #333 !important; }
-        }
     </style>
 </head>
 <body>
@@ -79,9 +79,18 @@
     <h2 style="width:100%; max-width:1200px;">Ma Séquence (<span id="count">0</span>)</h2>
     <div id="choreography-grid"></div>
 
-    <h2 style="width:100%; max-width:1200px; margin-top:40px;">Banque de mouvements</h2>
+    <hr style="width:100%; border:0; border-top:1px solid #334155; margin:40px 0;">
+
+    <h2 style="width:100%; max-width:1200px;">Banque de mouvements</h2>
+    <input type="text" class="search-bar" id="search-input" placeholder="🔍 Rechercher un mouvement..." oninput="handleFilterChange()">
     <div id="filterBar" style="margin-bottom:20px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;"></div>
+    
     <div id="library-grid"></div>
+    <div class="pagination">
+        <button id="prevPage" class="btn-page" onclick="changePage(-1)">◀ Précédent</button>
+        <span class="page-info">Page <span id="current-page">1</span> / <span id="total-pages">1</span></span>
+        <button id="nextPage" class="btn-page" onclick="changePage(1)">Suivant ▶</button>
+    </div>
 
     <div id="training-overlay">
         <button class="btn-danger" style="position:absolute; top:20px; right:20px;" onclick="stopTraining()">QUITTER ✕</button>
@@ -218,48 +227,56 @@
 ];
 
 
+
         let myChore = [];
         let currentMode = 'random';
-        let trainIdx = 0;
-        let lastFilter = 'Tous';
+        let currentPage = 1;
+        const itemsPerPage = 5; 
+        let filteredDatabase = [...database];
+        let currentCat = 'Tous';
 
         window.onload = () => { 
             initFilters(); 
-            // RESTAURATION : On récupère ce qui était là avant
             const saved = localStorage.getItem('choreography_save');
-            if (saved) {
-                myChore = JSON.parse(saved);
-            }
+            if (saved) myChore = JSON.parse(saved);
             updateUI(); 
-            renderLibrary(database);
+            handleFilterChange();
         };
 
         function getCatClass(cat) { return 'cat-' + cat.toLowerCase().replace(/ /g, '-'); }
 
-        function switchMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('tab-' + mode).classList.add('active');
-            document.getElementById('btn-gen').style.display = (mode === 'random' ? 'inline-block' : 'none');
-            // Note: On ne vide plus la choré ici pour permettre de basculer de mode sans perdre son travail
-            updateUI();
-        }
-
         function initFilters() {
             const cats = ["Tous", "Jambes", "Bras", "Tours", "Sauts", "Mixtes", "Passage au sol"];
             document.getElementById('filterBar').innerHTML = cats.map(c => 
-                `<button style="padding:8px 15px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer;" onclick="filterLib('${c}')">${c === 'Passage au sol' ? 'Sol' : c}</button>`).join('');
+                `<button style="padding:8px 15px; border-radius:6px; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer;" onclick="setCategory('${c}')">${c === 'Passage au sol' ? 'Sol' : c}</button>`).join('');
         }
 
-        function filterLib(cat) {
-            lastFilter = cat;
-            renderLibrary(cat === 'Tous' ? database : database.filter(m => m.c === cat));
+        function setCategory(cat) { currentCat = cat; currentPage = 1; handleFilterChange(); }
+
+        function handleFilterChange() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            filteredDatabase = database.filter(m => {
+                const matchCat = (currentCat === 'Tous' || m.c === currentCat);
+                const matchSearch = m.n.toLowerCase().includes(query);
+                return matchCat && matchSearch;
+            });
+            currentPage = 1; 
+            renderLibrary();
         }
 
-        function renderLibrary(data) {
-            document.getElementById('library-grid').innerHTML = data.map(m => `
+        function renderLibrary() {
+            const totalPages = Math.ceil(filteredDatabase.length / itemsPerPage) || 1;
+            const start = (currentPage - 1) * itemsPerPage;
+            const pageData = filteredDatabase.slice(start, start + itemsPerPage);
+
+            document.getElementById('current-page').innerText = currentPage;
+            document.getElementById('total-pages').innerText = totalPages;
+            document.getElementById('prevPage').disabled = (currentPage === 1);
+            document.getElementById('nextPage').disabled = (currentPage === totalPages);
+
+            document.getElementById('library-grid').innerHTML = pageData.map(m => `
                 <div class="move-card ${getCatClass(m.c)}">
-                    <video src="${m.p}#t=0.1" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
+                    <video src="${m.p}#t=0.5" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
                     <div class="move-info">
                         <span class="cat-tag">${m.c}</span>
                         <div style="font-weight:bold; margin-top:8px;">${m.n}</div>
@@ -268,115 +285,45 @@
                 </div>`).join('');
         }
 
-        function confirmGenerate() {
-            if(myChore.length > 0) {
-                if(!confirm("Cela va remplacer ta chorégraphie actuelle. Continuer ?")) return;
-            }
-            generateRandom();
-        }
-
-        function generateRandom() {
-            myChore = [];
-            ["Jambes", "Bras", "Tours", "Sauts", "Mixtes", "Passage au sol"].forEach(c => {
-                const opt = database.filter(m => m.c === c);
-                if(opt.length) myChore.push({...opt[Math.floor(Math.random()*opt.length)]});
-            });
-            updateUI();
-        }
-
-        function addToChore(path) {
-            myChore.push({...database.find(m => m.p === path)});
-            updateUI();
+        function changePage(dir) {
+            currentPage += dir;
+            renderLibrary();
+            window.scrollTo({ top: document.getElementById('search-input').offsetTop - 20, behavior: 'smooth' });
         }
 
         function updateUI() {
-            // SAUVEGARDE SYSTÉMATIQUE
             localStorage.setItem('choreography_save', JSON.stringify(myChore));
-
             document.getElementById('count').innerText = myChore.length;
             document.getElementById('choreography-grid').innerHTML = myChore.map((m, i) => `
                 <div class="move-card ${getCatClass(m.c)}">
-                    <video src="${m.p}#t=0.1" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
+                    <video src="${m.p}#t=0.5" preload="metadata" onclick="openZoom('${m.p}')" muted></video>
                     <div class="move-info">
                         <strong>#${i+1}</strong> <span class="cat-tag">${m.c}</span>
                         <div style="font-weight:bold; margin-top:8px;">${m.n}</div>
                         ${currentMode === 'design' ? `
-                            <div class="btn-nav-box">
-                                <button class="btn-nav" onclick="moveMove(${i}, -1)">←</button>
-                                <button class="btn-nav" onclick="moveMove(${i}, 1)">→</button>
-                                <button class="btn-nav" style="background:#ef4444" onclick="removeMove(${i})">🗑️</button>
+                            <div class="btn-nav-box" style="display:flex; gap:5px; margin-top:10px;">
+                                <button style="flex:1; background:#334155; color:white; border:none; padding:5px; border-radius:4px;" onclick="moveMove(${i}, -1)">←</button>
+                                <button style="flex:1; background:#334155; color:white; border:none; padding:5px; border-radius:4px;" onclick="moveMove(${i}, 1)">→</button>
+                                <button style="flex:1; background:#ef4444; color:white; border:none; padding:5px; border-radius:4px;" onclick="removeMove(${i})">🗑️</button>
                             </div>` : ''}
                     </div>
                 </div>`).join('');
-            renderLibrary(lastFilter === 'Tous' ? database : database.filter(m => m.c === lastFilter));
+            renderLibrary();
         }
 
-        function confirmClear() {
-            if(confirm("Voulez-vous vraiment tout effacer ?")) {
-                myChore = [];
-                updateUI();
-            }
-        }
-
-        // --- ENTRAINEMENT ---
-        function startTraining() {
-            if (myChore.length === 0) return alert("Séquence vide !");
-            trainIdx = 0;
-            document.getElementById('training-overlay').style.display = 'flex';
-            showMove();
-        }
-
-        function showMove() {
-            const move = myChore[trainIdx];
-            const tv = document.getElementById('training-video');
-            const color = getComputedStyle(document.documentElement).getPropertyValue('--cat-' + move.c.toLowerCase().replace(/ /g, '-')).trim();
-            tv.src = move.p;
-            tv.style.borderColor = color;
-            document.getElementById('train-move-name').innerText = move.n;
-            document.getElementById('train-move-name').style.color = color;
-            document.getElementById('train-move-cat-tag').innerText = move.c;
-            document.getElementById('train-step').innerText = `Mouvement ${trainIdx + 1} / ${myChore.length}`;
-            document.getElementById('btn-next').innerText = (trainIdx === myChore.length - 1) ? "Terminer ✓" : "Suivant ➡";
-        }
-
-        function changeMove(dir) {
-            trainIdx += dir;
-            if (trainIdx < 0) trainIdx = 0;
-            if (trainIdx >= myChore.length) { stopTraining(); return; }
-            showMove();
-        }
-
-        function stopTraining() {
-            const tv = document.getElementById('training-video');
-            tv.pause(); tv.src = "";
-            document.getElementById('training-overlay').style.display = 'none';
-        }
-
-        function openZoom(p) {
-            const zv = document.getElementById('zoom-video');
-            zv.src = p;
-            document.getElementById('zoom-modal').style.display='flex';
-            zv.play();
-        }
-
-        function closeZoom() {
-            const zv = document.getElementById('zoom-video');
-            zv.pause(); zv.src = "";
-            document.getElementById('zoom-modal').style.display='none';
-        }
-
-        function moveMove(i, d) { 
-            const ni = i+d; 
-            if(ni>=0 && ni<myChore.length) { 
-                [myChore[i], myChore[ni]] = [myChore[ni], myChore[i]]; 
-                updateUI(); 
-            } 
-        }
-
-        function removeMove(i) { 
-            myChore.splice(i, 1); 
-            updateUI(); 
-        }
+        function switchMode(m) { currentMode = m; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById('tab-'+m).classList.add('active'); document.getElementById('btn-gen').style.display = (m==='random'?'inline-block':'none'); updateUI(); }
+        function confirmGenerate() { if(myChore.length>0 && !confirm("Écraser la séquence ?")) return; generateRandom(); }
+        function generateRandom() { myChore = []; ["Jambes", "Bras", "Tours", "Sauts", "Mixtes", "Passage au sol"].forEach(c => { const opt = database.filter(m => m.c === c); if(opt.length) myChore.push({...opt[Math.floor(Math.random()*opt.length)]}); }); updateUI(); }
+        function addToChore(p) { myChore.push({...database.find(m => m.p === p)}); updateUI(); }
+        function confirmClear() { if(confirm("Tout effacer ?")) { myChore = []; updateUI(); } }
+        function startTraining() { if(!myChore.length) return; trainIdx = 0; document.getElementById('training-overlay').style.display = 'flex'; showMove(); }
+        function showMove() { const m = myChore[trainIdx]; const tv = document.getElementById('training-video'); const color = getComputedStyle(document.documentElement).getPropertyValue('--cat-' + m.c.toLowerCase().replace(/ /g, '-')).trim(); tv.src = m.p; tv.style.borderColor = color; document.getElementById('train-move-name').innerText = m.n; document.getElementById('train-move-name').style.color = color; document.getElementById('train-move-cat-tag').innerText = m.c; document.getElementById('train-step').innerText = `Mouvement ${trainIdx+1}/${myChore.length}`; document.getElementById('btn-next').innerText = (trainIdx === myChore.length-1) ? "Terminer" : "Suivant"; }
+        function changeMove(d) { trainIdx += d; if (trainIdx < 0) trainIdx = 0; if (trainIdx >= myChore.length) { stopTraining(); return; } showMove(); }
+        function stopTraining() { const tv = document.getElementById('training-video'); tv.pause(); tv.src = ""; document.getElementById('training-overlay').style.display = 'none'; }
+        function openZoom(p) { const zv = document.getElementById('zoom-video'); zv.src = p; document.getElementById('zoom-modal').style.display='flex'; zv.play(); }
+        function closeZoom() { const zv = document.getElementById('zoom-video'); zv.pause(); zv.src = ""; document.getElementById('zoom-modal').style.display='none'; }
+        function moveMove(i, d) { const ni = i+d; if(ni>=0 && ni<myChore.length) { [myChore[i], myChore[ni]] = [myChore[ni], myChore[i]]; updateUI(); } }
+        function removeMove(i) { myChore.splice(i, 1); updateUI(); }
     </script>
 </body>
 </html>
