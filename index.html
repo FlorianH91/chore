@@ -60,6 +60,9 @@
         #zoom-modal video { width: 90%; max-width: 900px; border-radius: 10px; }
     </style>
 </head>
+
+
+
 <body>
 
     <header>
@@ -325,5 +328,19 @@
         function moveMove(i, d) { const ni = i+d; if(ni>=0 && ni<myChore.length) { [myChore[i], myChore[ni]] = [myChore[ni], myChore[i]]; updateUI(); } }
         function removeMove(i) { myChore.splice(i, 1); updateUI(); }
     </script>
+
+<footer style="margin-top: 60px; padding: 30px; border-top: 1px solid #334155; text-align: center; font-size: 0.85rem; color: #94a3b8; line-height: 1.6; font-family: sans-serif;">
+    <p><strong>Cadre Pédagogique :</strong> Cette application est destinée exclusivement à un usage scolaire en EPS.</p>
+<p>
+        <strong>Conception et Développement :</strong> Application créée et codée par HUGEDET Florian &copy; 2026.
+        <br>Tous droits réservés pour la structure et la logique du code.
+    </p>
+    <p><strong>Crédits Vidéos :</strong> Extraits de la vidéo originale 
+        <br><em>"100 Contemporary Dance Moves | Lyrical, Contemporary and Modern Dance"</em> 
+        <br>par <strong>Dibodance</strong> sur YouTube.
+    </p>
+    <p>Source originale : <a href="https://www.youtube.com/watch?v=GK7q-LBC36g" target="_blank" style="color: #6366f1; text-decoration: none;">Visionner sur YouTube</a></p>
+</footer>
+
 </body>
 </html>
